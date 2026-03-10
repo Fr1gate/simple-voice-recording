@@ -43,6 +43,15 @@ function createWindow(): void {
     (_webContents, permission, callback) => callback(permission === "media"),
   );
 
+  mainWindow.on("page-title-updated", (event) => {
+    event.preventDefault();
+    try {
+      mainWindow.setTitle(`Microphone v${app.getVersion()}`);
+    } catch (error) {
+      console.error("Failed to enforce window title", error);
+    }
+  });
+
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
