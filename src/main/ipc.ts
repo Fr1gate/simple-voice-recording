@@ -9,6 +9,7 @@ import {
   listRecentFiles,
   showFileInExplorer,
 } from "./recent";
+import { autoUpdater } from "electron-updater";
 
 const FORMAT_FILTERS: Record<string, Electron.FileFilter[]> = {
   wav: [{ name: "WAV Audio", extensions: ["wav"] }],
@@ -128,11 +129,12 @@ export function registerIpcHandlers(): void {
   );
 
   ipcMain.handle("update:start-download", async () => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (!win) return;
-    // main/index.ts already registered autoUpdater listeners and disabled autoDownload.
-    // Here we just trigger the download when the user agrees.
-    const { autoUpdater } = await import("electron-updater");
-    await autoUpdater.downloadUpdate();
+    console.log("[update][main] IPC update:start-download");
+    try {
+      await autoUpdater.downloadUpdate();
+    } catch (error) {
+      console.error("[update][main] downloadUpdate failed", error);
+      throw error;
+    }
   });
 }
