@@ -86,9 +86,21 @@
           v-else-if="updateStatus === 'error'"
           class="app_update-row app_update-row_error"
         >
-          <span class="app_update-text">
-            Ошибка обновления: {{ updateError || "Неизвестная ошибка" }}
-          </span>
+          <div class="app_update-error-body">
+            <div class="app_update-error-message">
+              Ошибка обновления:
+              <span v-if="updateError">{{ updateError }}</span>
+              <span v-else>Неизвестная ошибка</span>
+            </div>
+            <button
+              v-if="updateError"
+              type="button"
+              class="app_update-button app_update-button_copy"
+              @click="copyUpdateError"
+            >
+              Скопировать текст ошибки
+            </button>
+          </div>
         </div>
       </div>
     </footer>
@@ -281,6 +293,15 @@ async function adjustWindowHeightToContent(): Promise<void> {
   }
 }
 
+async function copyUpdateError(): Promise<void> {
+  if (!updateError.value) return;
+  try {
+    await navigator.clipboard.writeText(updateError.value);
+  } catch (err) {
+    console.error("[update] copy error text failed", err);
+  }
+}
+
 onMounted(async () => {
   try {
     recentFiles.value = await window.api.getRecentFiles();
@@ -458,6 +479,10 @@ onMounted(async () => {
     }
   }
 
+  &_update-button_copy {
+    align-self: flex-start;
+  }
+
   &_update-progress-bar {
     width: 100%;
     height: 6px;
@@ -478,6 +503,22 @@ onMounted(async () => {
     justify-content: space-between;
     font-size: 11px;
     color: $text-muted;
+  }
+
+  &_update-error-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 96px;
+    overflow-y: auto;
+    text-align: left;
+  }
+
+  &_update-error-message {
+    font-size: 11px;
+    color: $text-muted;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   &_recent {

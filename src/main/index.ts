@@ -13,6 +13,7 @@ function createWindow(): void {
     minHeight: 560,
     show: false,
     autoHideMenuBar: true,
+    title: `Microphone v${app.getVersion()}`,
     backgroundColor: "#12141a",
     ...(process.platform === "linux" ? { icon } : {}),
     webPreferences: {
