@@ -33,9 +33,13 @@
     <div class="app_controls">
       <RecordButton
         :is-recording="isRecording"
+        :is-paused="isPaused"
         :duration="displayedDuration"
         :disabled="status === 'saving' || devices.length === 0"
+        :pause-label="t('controls.pause')"
+        :resume-label="t('controls.resume')"
         @toggle="handleToggle"
+        @pause-toggle="handlePauseToggle"
       />
     </div>
 
@@ -45,7 +49,11 @@
       <div v-if="updateStatus !== 'idle'" class="app_update">
         <div v-if="updateStatus === 'available'" class="app_update-row">
           <span class="app_update-text">
-            {{ updateVersion ? `Доступна новая версия ${updateVersion}` : "Доступна новая версия" }}
+            {{
+              updateVersion
+                ? `Доступна новая версия ${updateVersion}`
+                : "Доступна новая версия"
+            }}
           </span>
           <button
             type="button"
@@ -117,7 +125,7 @@ import RecordButton from "./components/RecordButton.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import { useAudioRecorder } from "./composables/useAudioRecorder";
 
-type Status = "idle" | "recording" | "saving" | "done" | "error";
+type Status = "idle" | "recording" | "paused" | "saving" | "done" | "error";
 
 const { t } = useI18n();
 
@@ -125,8 +133,11 @@ const {
   devices,
   selectedDeviceId,
   isRecording,
+  isPaused,
   duration,
   startRecording,
+  pauseRecording,
+  resumeRecording,
   stopRecording,
 } = useAudioRecorder();
 
@@ -136,7 +147,13 @@ const status = ref<Status>("idle");
 const errorMessage = ref("");
 const recentFiles = ref<string[]>([]);
 
-type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "downloaded" | "error";
+type UpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "error";
 
 const updateStatus = ref<UpdateStatus>("idle");
 const updateVersion = ref<string | null>(null);
@@ -147,7 +164,9 @@ const updateTransferred = ref(0);
 const updateTotal = ref(0);
 
 const displayedDuration = computed(() => {
-  return status.value === "recording" ? duration.value : 0;
+  return status.value === "recording" || status.value === "paused"
+    ? duration.value
+    : 0;
 });
 
 const formattedUpdateSpeed = computed(() => {
@@ -170,6 +189,8 @@ const statusText = computed(() => {
         : t("status.ready");
     case "recording":
       return t("status.recording");
+    case "paused":
+      return t("status.paused");
     case "saving":
       return t("status.saving");
     case "done":
@@ -197,6 +218,22 @@ async function handleToggle(): Promise<void> {
     await handleStop();
   } else {
     await handleStart();
+  }
+}
+
+async function handlePauseToggle(): Promise<void> {
+  if (!isRecording.value) return;
+  try {
+    if (isPaused.value) {
+      await resumeRecording();
+      status.value = "recording";
+    } else {
+      await pauseRecording();
+      status.value = "paused";
+    }
+  } catch (e) {
+    status.value = "error";
+    errorMessage.value = e instanceof Error ? e.message : t("status.error");
   }
 }
 
@@ -319,7 +356,8 @@ onMounted(async () => {
       }
 
       const raw = state as Record<string, unknown>;
-      const st = typeof raw.status === "string" ? (raw.status as string) : "idle";
+      const st =
+        typeof raw.status === "string" ? (raw.status as string) : "idle";
 
       switch (st) {
         case "checking":
@@ -341,7 +379,9 @@ onMounted(async () => {
               ? (raw.bytesPerSecond as number)
               : 0;
           updateTransferred.value =
-            typeof raw.transferred === "number" ? (raw.transferred as number) : 0;
+            typeof raw.transferred === "number"
+              ? (raw.transferred as number)
+              : 0;
           updateTotal.value =
             typeof raw.total === "number" ? (raw.total as number) : 0;
           updateError.value = null;

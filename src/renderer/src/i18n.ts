@@ -29,11 +29,16 @@ const messages = {
       noDevices: 'No audio devices detected',
       ready: 'Ready to record',
       recording: 'Recording…',
+      paused: 'Paused',
       saving: 'Saving…',
       done: 'Recording saved!',
       error: 'Something went wrong',
       startError: 'Failed to start recording',
       saveError: 'Failed to save recording'
+    },
+    controls: {
+      pause: 'Pause',
+      resume: 'Resume'
     },
     language: {
       label: 'Language',
@@ -68,11 +73,16 @@ const messages = {
       noDevices: 'Устройства записи не найдены',
       ready: 'Готов к записи',
       recording: 'Идёт запись…',
+      paused: 'Пауза',
       saving: 'Сохранение…',
       done: 'Запись сохранена!',
       error: 'Произошла ошибка',
       startError: 'Не удалось начать запись',
       saveError: 'Не удалось сохранить запись'
+    },
+    controls: {
+      pause: 'Пауза',
+      resume: 'Продолжить'
     },
     language: {
       label: 'Язык',
@@ -107,11 +117,16 @@ const messages = {
       noDevices: 'No se detectaron dispositivos de audio',
       ready: 'Listo para grabar',
       recording: 'Grabando…',
+      paused: 'Pausado',
       saving: 'Guardando…',
       done: 'Grabación guardada',
       error: 'Algo salió mal',
       startError: 'No se pudo iniciar la grabación',
       saveError: 'No se pudo guardar la grabación'
+    },
+    controls: {
+      pause: 'Pausa',
+      resume: 'Reanudar'
     },
     language: {
       label: 'Idioma',

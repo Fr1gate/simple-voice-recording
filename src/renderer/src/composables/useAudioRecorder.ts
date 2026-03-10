@@ -4,6 +4,7 @@ export function useAudioRecorder() {
   const devices = ref<MediaDeviceInfo[]>([])
   const selectedDeviceId = ref('')
   const isRecording = ref(false)
+  const isPaused = ref(false)
   const duration = ref(0)
 
   let audioContext: AudioContext | null = null
@@ -29,6 +30,16 @@ export function useAudioRecorder() {
     }
   }
 
+  function attachProcessorHandler(): void {
+    if (!scriptProcessor) return
+    scriptProcessor.onaudioprocess = (e) => {
+      const input = e.inputBuffer.getChannelData(0)
+      const chunk = new Float32Array(input.length)
+      chunk.set(input)
+      void window.api.appendRecordingChunk(chunk.buffer)
+    }
+  }
+
   async function startRecording(): Promise<void> {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -43,26 +54,40 @@ export function useAudioRecorder() {
     audioContext = new AudioContext({ sampleRate: 44100 })
     recordedSampleRate = audioContext.sampleRate
 
-    // проинформировать main-процесс о начале новой потоковой записи
     await window.api.startTempRecording(recordedSampleRate)
 
     sourceNode = audioContext.createMediaStreamSource(mediaStream)
     scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
-
-    scriptProcessor.onaudioprocess = (e) => {
-      const input = e.inputBuffer.getChannelData(0)
-      // копируем данные, чтобы не зависеть от переиспользуемого буфера Web Audio
-      const chunk = new Float32Array(input.length)
-      chunk.set(input)
-      void window.api.appendRecordingChunk(chunk.buffer)
-    }
+    attachProcessorHandler()
 
     sourceNode.connect(scriptProcessor)
     scriptProcessor.connect(audioContext.destination)
 
     duration.value = 0
     isRecording.value = true
+    isPaused.value = false
     durationTimer = setInterval(() => duration.value++, 1000)
+  }
+
+  async function pauseRecording(): Promise<void> {
+    if (!isRecording.value || isPaused.value) return
+    if (durationTimer) {
+      clearInterval(durationTimer)
+      durationTimer = null
+    }
+    if (scriptProcessor) {
+      scriptProcessor.onaudioprocess = null
+    }
+    isPaused.value = true
+  }
+
+  async function resumeRecording(): Promise<void> {
+    if (!isRecording.value || !isPaused.value) return
+    if (scriptProcessor) {
+      attachProcessorHandler()
+    }
+    durationTimer = setInterval(() => duration.value++, 1000)
+    isPaused.value = false
   }
 
   async function stopRecording(): Promise<void> {
@@ -85,6 +110,7 @@ export function useAudioRecorder() {
     }
 
     isRecording.value = false
+    isPaused.value = false
   }
 
   onMounted(() => {
@@ -101,9 +127,12 @@ export function useAudioRecorder() {
     devices,
     selectedDeviceId,
     isRecording,
+    isPaused,
     duration,
     refreshDevices,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording
   }
 }

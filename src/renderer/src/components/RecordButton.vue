@@ -1,48 +1,77 @@
 <template>
   <div class="record-button">
-    <button
-      class="record-button_btn"
-      :class="{ 'record-button_btn_recording': isRecording }"
-      :disabled="disabled"
-      @click="$emit('toggle')"
-    >
-      <span class="record-button_icon" />
-    </button>
+    <div class="record-button_row">
+      <button
+        class="record-button_btn"
+        :class="{ 'record-button_btn_recording': isRecording }"
+        :disabled="disabled"
+        @click="$emit('toggle')"
+      >
+        <span class="record-button_icon" />
+      </button>
+
+      <button
+        v-if="isRecording"
+        type="button"
+        class="record-button_pause-btn"
+        :class="{ 'record-button_pause-btn_active': isPaused }"
+        :disabled="!isRecording || disabled"
+        :aria-label="isPaused ? resumeLabel : pauseLabel"
+        @click="$emit('pause-toggle')"
+      >
+        <span class="record-button_pause-icon">
+          <span class="record-button_pause-bar" />
+          <span class="record-button_pause-bar" />
+        </span>
+      </button>
+    </div>
+
     <div class="record-button_timer">{{ formattedDuration }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from "vue";
 
 const props = defineProps<{
-  isRecording: boolean
-  duration: number
-  disabled?: boolean
-}>()
+  isRecording: boolean;
+  isPaused: boolean;
+  duration: number;
+  disabled?: boolean;
+  pauseLabel: string;
+  resumeLabel: string;
+}>();
 
 defineEmits<{
-  toggle: []
-}>()
+  toggle: [];
+  "pause-toggle": [];
+}>();
 
 const formattedDuration = computed(() => {
-  const h = Math.floor(props.duration / 3600)
-  const m = Math.floor((props.duration % 3600) / 60)
-  const s = props.duration % 60
-  const mm = String(m).padStart(2, '0')
-  const ss = String(s).padStart(2, '0')
-  return h > 0 ? `${String(h).padStart(2, '0')}:${mm}:${ss}` : `${mm}:${ss}`
-})
+  const h = Math.floor(props.duration / 3600);
+  const m = Math.floor((props.duration % 3600) / 60);
+  const s = props.duration % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${String(h).padStart(2, "0")}:${mm}:${ss}` : `${mm}:${ss}`;
+});
 </script>
 
 <style lang="scss" scoped>
-@use '../assets/variables' as *;
+@use "../assets/variables" as *;
 
 .record-button {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
+
+  &_row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
 
   &_btn {
     width: 72px;
@@ -74,6 +103,53 @@ const formattedDuration = computed(() => {
       &:hover:not(:disabled) {
         background: $danger-subtle;
       }
+    }
+  }
+
+  &_pause-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid $border;
+    background: $bg-secondary;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all $transition-normal;
+
+    &:hover:not(:disabled) {
+      border-color: $accent-hover;
+      background: $accent-subtle;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  &_pause-icon {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  &_pause-bar {
+    width: 6px;
+    height: 20px;
+    border-radius: 999px;
+    background: $text-primary;
+  }
+
+  &_pause-btn_active {
+    border-color: $accent;
+    box-shadow: 0 0 0 4px $accent-subtle;
+
+    .record-button_pause-bar {
+      background: $accent;
     }
   }
 
