@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { registerIpcHandlers } from "./ipc";
+import { autoUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
 
 function createWindow(): void {
@@ -49,6 +50,12 @@ app.whenReady().then(() => {
 
   registerIpcHandlers();
   createWindow();
+
+  if (!is.dev) {
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      console.error("autoUpdater error", error);
+    });
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
