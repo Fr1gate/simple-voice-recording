@@ -11,6 +11,8 @@ interface RecorderAPI {
   getRecentFiles(): Promise<string[]>
   openInExplorer(filePath: string): Promise<void>
   resizeByDelta(deltaHeight: number): Promise<void>
+  startUpdateDownload(): Promise<void>
+  onUpdateState(listener: (state: unknown) => void): () => void
 }
 
 declare global {

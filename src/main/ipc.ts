@@ -126,4 +126,13 @@ export function registerIpcHandlers(): void {
       win.setContentSize(currentWidth, targetHeight);
     },
   );
+
+  ipcMain.handle("update:start-download", async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return;
+    // main/index.ts already registered autoUpdater listeners and disabled autoDownload.
+    // Here we just trigger the download when the user agrees.
+    const { autoUpdater } = await import("electron-updater");
+    await autoUpdater.downloadUpdate();
+  });
 }

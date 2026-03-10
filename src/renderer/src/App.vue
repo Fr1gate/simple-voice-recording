@@ -41,6 +41,56 @@
 
     <footer class="app_status">
       <span class="app_status-text" :class="statusClass">{{ statusText }}</span>
+
+      <div v-if="updateStatus !== 'idle'" class="app_update">
+        <div v-if="updateStatus === 'available'" class="app_update-row">
+          <span class="app_update-text">
+            {{ updateVersion ? `Доступна новая версия ${updateVersion}` : "Доступна новая версия" }}
+          </span>
+          <button
+            type="button"
+            class="app_update-button"
+            @click="startUpdateDownload"
+          >
+            Обновить
+          </button>
+        </div>
+
+        <div
+          v-else-if="updateStatus === 'downloading'"
+          class="app_update-row app_update-row_downloading"
+        >
+          <div class="app_update-progress-bar">
+            <div
+              class="app_update-progress-fill"
+              :style="{ width: updatePercent + '%' }"
+            />
+          </div>
+          <div class="app_update-meta">
+            <span>{{ formattedUpdatePercent }}</span>
+            <span v-if="formattedUpdateSpeed">{{ formattedUpdateSpeed }}</span>
+          </div>
+        </div>
+
+        <div v-else-if="updateStatus === 'downloaded'" class="app_update-row">
+          <span class="app_update-text">
+            Обновление скачано, приложение будет перезапущено…
+          </span>
+        </div>
+
+        <div v-else-if="updateStatus === 'checking'" class="app_update-row">
+          <span class="app_update-text">Проверка обновлений…</span>
+        </div>
+
+        <div
+          v-else-if="updateStatus === 'error'"
+          class="app_update-row app_update-row_error"
+        >
+          <span class="app_update-text">
+            Ошибка обновления: {{ updateError || "Неизвестная ошибка" }}
+          </span>
+        </div>
+      </div>
     </footer>
   </div>
 </template>
@@ -74,8 +124,30 @@ const status = ref<Status>("idle");
 const errorMessage = ref("");
 const recentFiles = ref<string[]>([]);
 
+type UpdateStatus = "idle" | "checking" | "available" | "downloading" | "downloaded" | "error";
+
+const updateStatus = ref<UpdateStatus>("idle");
+const updateVersion = ref<string | null>(null);
+const updateError = ref<string | null>(null);
+const updatePercent = ref(0);
+const updateBytesPerSecond = ref(0);
+const updateTransferred = ref(0);
+const updateTotal = ref(0);
+
 const displayedDuration = computed(() => {
   return status.value === "recording" ? duration.value : 0;
+});
+
+const formattedUpdateSpeed = computed(() => {
+  const bps = updateBytesPerSecond.value;
+  if (!bps) return "";
+  if (bps < 1024) return `${bps.toFixed(0)} B/s`;
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
+  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
+});
+
+const formattedUpdatePercent = computed(() => {
+  return `${updatePercent.value.toFixed(0)}%`;
 });
 
 const statusText = computed(() => {
@@ -181,6 +253,34 @@ async function openRecent(path: string): Promise<void> {
   await window.api.openInExplorer(path);
 }
 
+async function startUpdateDownload(): Promise<void> {
+  try {
+    if (updateStatus.value !== "available") return;
+    updateStatus.value = "downloading";
+    await window.api.startUpdateDownload();
+  } catch (err) {
+    console.error("[update] start download failed", err);
+    updateStatus.value = "error";
+    updateError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function adjustWindowHeightToContent(): Promise<void> {
+  try {
+    await nextTick();
+    const root = document.querySelector(".app") as HTMLElement | null;
+    if (!root) return;
+    const contentHeight = root.scrollHeight;
+    const viewportHeight = window.innerHeight;
+    const delta = contentHeight - viewportHeight;
+    if (Math.abs(delta) > 2) {
+      await window.api.resizeByDelta(delta);
+    }
+  } catch (err) {
+    console.error("[resize-debug] resize failed", err);
+  }
+}
+
 onMounted(async () => {
   try {
     recentFiles.value = await window.api.getRecentFiles();
@@ -188,18 +288,68 @@ onMounted(async () => {
     recentFiles.value = [];
   }
   try {
-    // несколько итераций подгонки, чтобы увидеть реальную разницу
+    window.api.onUpdateState((state: unknown) => {
+      console.log("[update] state:", state);
+      if (!state || typeof state !== "object") {
+        updateStatus.value = "idle";
+        void adjustWindowHeightToContent();
+        return;
+      }
 
-    await nextTick();
-    const root = document.querySelector(".app") as HTMLElement | null;
+      const raw = state as Record<string, unknown>;
+      const st = typeof raw.status === "string" ? (raw.status as string) : "idle";
 
-    const contentHeight = root?.scrollHeight ?? 0;
-    const viewportHeight = window.innerHeight;
-    const delta = contentHeight - viewportHeight;
+      switch (st) {
+        case "checking":
+          updateStatus.value = "checking";
+          updateError.value = null;
+          break;
+        case "available":
+          updateStatus.value = "available";
+          updateVersion.value =
+            typeof raw.version === "string" ? (raw.version as string) : null;
+          updateError.value = null;
+          break;
+        case "downloading":
+          updateStatus.value = "downloading";
+          updatePercent.value =
+            typeof raw.percent === "number" ? (raw.percent as number) : 0;
+          updateBytesPerSecond.value =
+            typeof raw.bytesPerSecond === "number"
+              ? (raw.bytesPerSecond as number)
+              : 0;
+          updateTransferred.value =
+            typeof raw.transferred === "number" ? (raw.transferred as number) : 0;
+          updateTotal.value =
+            typeof raw.total === "number" ? (raw.total as number) : 0;
+          updateError.value = null;
+          break;
+        case "downloaded":
+          updateStatus.value = "downloaded";
+          if (typeof raw.version === "string") {
+            updateVersion.value = raw.version as string;
+          }
+          updateError.value = null;
+          break;
+        case "error":
+          updateStatus.value = "error";
+          updateError.value =
+            typeof raw.message === "string"
+              ? (raw.message as string)
+              : "Update error";
+          break;
+        case "idle":
+        default:
+          updateStatus.value = "idle";
+          break;
+      }
 
-    await window.api.resizeByDelta(delta);
+      void adjustWindowHeightToContent();
+    });
+
+    await adjustWindowHeightToContent();
   } catch (err) {
-    console.error("[resize-debug] resize failed", err);
+    console.error("[update] subscribe/resize failed", err);
   }
 });
 </script>
@@ -263,6 +413,71 @@ onMounted(async () => {
     &_error {
       color: $danger;
     }
+  }
+
+  &_update {
+    margin-top: 8px;
+    font-size: 12px;
+    color: $text-secondary;
+  }
+
+  &_update-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    &_downloading {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    &_error {
+      color: $danger;
+    }
+  }
+
+  &_update-text {
+    flex: 1;
+    text-align: left;
+  }
+
+  &_update-button {
+    padding: 4px 10px;
+    border-radius: $radius-sm;
+    border: 1px solid $accent;
+    color: $accent;
+    background: $accent-subtle;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+
+    &:hover {
+      background: $accent;
+      color: $bg-primary;
+    }
+  }
+
+  &_update-progress-bar {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: $bg-secondary;
+    overflow: hidden;
+  }
+
+  &_update-progress-fill {
+    height: 100%;
+    background: $accent;
+    width: 0;
+    transition: width 200ms linear;
+  }
+
+  &_update-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: $text-muted;
   }
 
   &_recent {

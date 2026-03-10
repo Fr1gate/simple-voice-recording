@@ -41,6 +41,12 @@ function createWindow(): void {
   }
 }
 
+function sendUpdateState(state: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send("update:state", state);
+  }
+}
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId("com.microphone");
 
@@ -52,8 +58,59 @@ app.whenReady().then(() => {
   createWindow();
 
   if (!is.dev) {
-    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+    autoUpdater.autoDownload = false;
+
+    autoUpdater.on("checking-for-update", () => {
+      sendUpdateState({ status: "checking" });
+    });
+
+    autoUpdater.on("update-available", (info) => {
+      sendUpdateState({
+        status: "available",
+        version: info.version,
+        notes: info.releaseNotes ?? null,
+      });
+    });
+
+    autoUpdater.on("update-not-available", (info) => {
+      sendUpdateState({
+        status: "idle",
+        currentVersion: info.version,
+      });
+    });
+
+    autoUpdater.on("download-progress", (progress) => {
+      sendUpdateState({
+        status: "downloading",
+        percent: progress.percent,
+        transferred: progress.transferred,
+        total: progress.total,
+        bytesPerSecond: progress.bytesPerSecond,
+      });
+    });
+
+    autoUpdater.on("update-downloaded", (info) => {
+      sendUpdateState({
+        status: "downloaded",
+        version: info.version,
+      });
+      try {
+        autoUpdater.quitAndInstall();
+      } catch (error) {
+        console.error("autoUpdater quitAndInstall error", error);
+      }
+    });
+
+    autoUpdater.on("error", (error) => {
       console.error("autoUpdater error", error);
+      sendUpdateState({
+        status: "error",
+        message: error == null ? "Unknown error" : String(error),
+      });
+    });
+
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.error("autoUpdater checkForUpdates error", error);
     });
   }
 
