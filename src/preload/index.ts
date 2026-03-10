@@ -5,12 +5,14 @@ const api = {
   selectSavePath: (format: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:select-save-path', format),
 
+  // старый API сохранения по готовому буферу оставляем для совместимости и тестов
   saveRecording: (
     pcmBuffer: ArrayBuffer,
     sampleRate: number,
     format: string,
     filePath: string
-  ): Promise<void> => ipcRenderer.invoke('recording:save', pcmBuffer, sampleRate, format, filePath),
+  ): Promise<void> =>
+    ipcRenderer.invoke('recording:save', pcmBuffer, sampleRate, format, filePath),
 
   getRecentFiles: (): Promise<string[]> => ipcRenderer.invoke('recent:list'),
 
@@ -22,6 +24,19 @@ const api = {
 
   startUpdateDownload: (): Promise<void> =>
     ipcRenderer.invoke('update:start-download'),
+
+  // потоковая запись во временный файл
+  startTempRecording: (sampleRate: number): Promise<void> =>
+    ipcRenderer.invoke('recording:start-temp', sampleRate),
+
+  appendRecordingChunk: (chunk: ArrayBuffer): Promise<void> =>
+    ipcRenderer.invoke('recording:append-chunk', chunk),
+
+  cancelTempRecording: (): Promise<void> =>
+    ipcRenderer.invoke('recording:cancel-temp'),
+
+  saveRecordingFromTemp: (format: string, filePath: string): Promise<void> =>
+    ipcRenderer.invoke('recording:save-temp', format, filePath),
 
   onUpdateState: (listener: (state: unknown) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: unknown) => {

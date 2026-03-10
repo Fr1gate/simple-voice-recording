@@ -10,7 +10,6 @@ export function useAudioRecorder() {
   let mediaStream: MediaStream | null = null
   let scriptProcessor: ScriptProcessorNode | null = null
   let sourceNode: MediaStreamAudioSourceNode | null = null
-  let pcmChunks: Float32Array[] = []
   let durationTimer: ReturnType<typeof setInterval> | null = null
   let recordedSampleRate = 44100
 
@@ -31,8 +30,6 @@ export function useAudioRecorder() {
   }
 
   async function startRecording(): Promise<void> {
-    pcmChunks = []
-
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: selectedDeviceId.value ? { exact: selectedDeviceId.value } : undefined,
@@ -46,11 +43,18 @@ export function useAudioRecorder() {
     audioContext = new AudioContext({ sampleRate: 44100 })
     recordedSampleRate = audioContext.sampleRate
 
+    // проинформировать main-процесс о начале новой потоковой записи
+    await window.api.startTempRecording(recordedSampleRate)
+
     sourceNode = audioContext.createMediaStreamSource(mediaStream)
     scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)
 
     scriptProcessor.onaudioprocess = (e) => {
-      pcmChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))
+      const input = e.inputBuffer.getChannelData(0)
+      // копируем данные, чтобы не зависеть от переиспользуемого буфера Web Audio
+      const chunk = new Float32Array(input.length)
+      chunk.set(input)
+      void window.api.appendRecordingChunk(chunk.buffer)
     }
 
     sourceNode.connect(scriptProcessor)
@@ -61,7 +65,7 @@ export function useAudioRecorder() {
     durationTimer = setInterval(() => duration.value++, 1000)
   }
 
-  async function stopRecording(): Promise<{ pcmData: Float32Array; sampleRate: number }> {
+  async function stopRecording(): Promise<void> {
     if (durationTimer) {
       clearInterval(durationTimer)
       durationTimer = null
@@ -81,17 +85,6 @@ export function useAudioRecorder() {
     }
 
     isRecording.value = false
-
-    const totalLength = pcmChunks.reduce((sum, c) => sum + c.length, 0)
-    const pcmData = new Float32Array(totalLength)
-    let offset = 0
-    for (const chunk of pcmChunks) {
-      pcmData.set(chunk, offset)
-      offset += chunk.length
-    }
-    pcmChunks = []
-
-    return { pcmData, sampleRate: recordedSampleRate }
   }
 
   onMounted(() => {

@@ -17,7 +17,7 @@ export default defineConfig(
           jsx: true
         },
         extraFileExtensions: ['.vue'],
-        parser: tseslint.parser
+        parser: tseslint.parser 
       }
     }
   },

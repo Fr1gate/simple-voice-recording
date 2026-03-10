@@ -1,21 +1,5 @@
 /// <reference types="vitest" />
 
-vi.mock("lamejs", () => {
-  function FakeEncoder(this: any) {
-    // no-op
-  }
-  FakeEncoder.prototype.encodeBuffer = function () {
-    return [new Uint8Array([1, 2, 3])];
-  };
-  FakeEncoder.prototype.flush = function () {
-    return new Uint8Array([4]);
-  };
-
-  return {
-    Mp3Encoder: FakeEncoder,
-  };
-});
-
 import { encodeWav, encodeMp3, floatToInt16 } from "../encoder";
 
 describe("encoder", () => {
@@ -48,8 +32,8 @@ describe("encoder", () => {
     expect(buf.length).toBe(44 + dataSize);
   });
 
-  test.skip("encodeMp3 returns a non-empty buffer for simple PCM data", () => {
-    const length = 44100;
+  test.skip("encodeMp3 uses Mp3Encoder and returns a non-empty buffer", () => {
+    const length = 4096;
     const pcm = new Float32Array(length);
     const freq = 440;
     const sampleRate = 44100;
@@ -59,6 +43,8 @@ describe("encoder", () => {
     }
 
     const buf = encodeMp3(pcm, sampleRate);
+
+    expect(FakeEncoder).toHaveBeenCalledWith(1, sampleRate, 192);
     expect(buf.length).toBeGreaterThan(0);
   });
 });

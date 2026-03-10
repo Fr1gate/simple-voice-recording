@@ -17,15 +17,34 @@ vi.mock("electron", () => {
     getFocusedWindow: vi.fn(),
   };
 
+  const app = {
+    getPath: vi.fn(() => "C:/temp"),
+  };
+
   return {
     ipcMain,
     dialog,
     BrowserWindow,
+    app,
   };
 });
 
+const files: Record<string, Buffer> = {};
+
 vi.mock("fs/promises", () => ({
-  writeFile: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn(async (path: string, data: Buffer) => {
+    files[path] = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  }),
+  appendFile: vi.fn(async (path: string, data: Buffer) => {
+    const prev = files[path] ?? Buffer.alloc(0);
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    files[path] = Buffer.concat([prev, buf]);
+  }),
+  readFile: vi.fn(async (path: string) => files[path] ?? Buffer.alloc(0)),
+  access: vi.fn(async () => undefined),
+  unlink: vi.fn(async (path: string) => {
+    delete files[path];
+  }),
 }));
 
 vi.mock("../encoder", () => ({
@@ -59,6 +78,9 @@ describe("ipc handlers", () => {
     }
 
     vi.resetModules();
+    for (const key of Object.keys(files)) {
+      delete files[key];
+    }
     await importIpc().then((mod) => {
       mod.registerIpcHandlers();
     });
@@ -145,5 +167,23 @@ describe("ipc handlers", () => {
     await handler({});
 
     expect(downloadUpdateMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("streaming temp recording saves encoded file and cleans up", async () => {
+    const { writeFile } = await import("fs/promises");
+
+    const start = handlers["recording:start-temp"];
+    const saveTemp = handlers["recording:save-temp"];
+
+    await start({}, 44100);
+
+    // имитируем, что во временный файл уже что-то записано;
+    // содержимое не важно, так как encodeMp3 замокан и не использует его размер.
+    await saveTemp({}, "mp3", "C:/recordings/streamed.mp3");
+
+    expect(writeFile).toHaveBeenCalledWith(
+      "C:/recordings/streamed.mp3",
+      Buffer.from("mp3-bytes"),
+    );
   });
 });

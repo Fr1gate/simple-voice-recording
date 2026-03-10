@@ -214,13 +214,14 @@ async function handleStart(): Promise<void> {
 
 async function handleStop(): Promise<void> {
   try {
-    const { pcmData, sampleRate } = await stopRecording();
+    await stopRecording();
 
     let path = savePath.value;
     if (!path) {
       const selected = await window.api.selectSavePath(format.value);
       if (!selected) {
         status.value = "idle";
+        await window.api.cancelTempRecording();
         return;
       }
       path = selected;
@@ -228,12 +229,7 @@ async function handleStop(): Promise<void> {
     }
 
     status.value = "saving";
-    await window.api.saveRecording(
-      pcmData.buffer as ArrayBuffer,
-      sampleRate,
-      format.value,
-      path,
-    );
+    await window.api.saveRecordingFromTemp(format.value, path);
     status.value = "done";
     if (!recentFiles.value.includes(path)) {
       recentFiles.value = [path, ...recentFiles.value].slice(0, 20);
@@ -247,6 +243,11 @@ async function handleStop(): Promise<void> {
   } catch (e) {
     status.value = "error";
     errorMessage.value = e instanceof Error ? e.message : t("status.saveError");
+    try {
+      await window.api.cancelTempRecording();
+    } catch {
+      // ignore cleanup errors
+    }
   }
 }
 
