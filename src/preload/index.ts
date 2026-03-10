@@ -15,7 +15,10 @@ const api = {
   getRecentFiles: (): Promise<string[]> => ipcRenderer.invoke('recent:list'),
 
   openInExplorer: (filePath: string): Promise<void> =>
-    ipcRenderer.invoke('recent:open', filePath)
+    ipcRenderer.invoke('recent:open', filePath),
+
+  resizeByDelta: (deltaHeight: number): Promise<void> =>
+    ipcRenderer.invoke('window:resize-by-delta', { deltaHeight })
 }
 
 if (process.contextIsolated) {

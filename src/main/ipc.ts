@@ -90,4 +90,40 @@ export function registerIpcHandlers(): void {
     if (!filePath) return;
     await showFileInExplorer(filePath);
   });
+
+  ipcMain.handle(
+    "window:resize-by-delta",
+    async (
+      event,
+      payload: {
+        deltaHeight: number;
+      },
+    ) => {
+      const win =
+        BrowserWindow.fromWebContents(event.sender) ??
+        BrowserWindow.getFocusedWindow();
+      if (!win) return;
+
+      const { deltaHeight } = payload;
+      if (!Number.isFinite(deltaHeight) || deltaHeight === 0) return;
+
+      const [currentWidth, currentHeight] = win.getContentSize();
+
+      const minHeight = 360;
+      const maxHeight = 900;
+
+      const targetHeight = Math.round(
+        Math.min(Math.max(currentHeight + deltaHeight, minHeight), maxHeight),
+      );
+
+      console.log("[resize-debug][main] resize-by-delta", {
+        deltaHeight,
+        currentWidth,
+        currentHeight,
+        targetHeight,
+      });
+
+      win.setContentSize(currentWidth, targetHeight);
+    },
+  );
 }

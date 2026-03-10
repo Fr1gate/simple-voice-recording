@@ -10,6 +10,7 @@ interface RecorderAPI {
   ): Promise<void>
   getRecentFiles(): Promise<string[]>
   openInExplorer(filePath: string): Promise<void>
+  resizeByDelta(deltaHeight: number): Promise<void>
 }
 
 declare global {

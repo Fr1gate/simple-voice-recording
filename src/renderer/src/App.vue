@@ -1,7 +1,6 @@
 <template>
   <div class="app">
     <header class="app_header">
-      <h1 class="app_title">{{ t("app.title") }}</h1>
       <LanguageSwitcher />
     </header>
 
@@ -34,7 +33,7 @@
     <div class="app_controls">
       <RecordButton
         :is-recording="isRecording"
-        :duration="duration"
+        :duration="displayedDuration"
         :disabled="status === 'saving' || devices.length === 0"
         @toggle="handleToggle"
       />
@@ -47,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { useI18n } from "./i18n";
 import DeviceSelector from "./components/DeviceSelector.vue";
 import FormatSelector from "./components/FormatSelector.vue";
@@ -74,6 +73,10 @@ const savePath = ref("");
 const status = ref<Status>("idle");
 const errorMessage = ref("");
 const recentFiles = ref<string[]>([]);
+
+const displayedDuration = computed(() => {
+  return status.value === "recording" ? duration.value : 0;
+});
 
 const statusText = computed(() => {
   switch (status.value) {
@@ -184,6 +187,20 @@ onMounted(async () => {
   } catch {
     recentFiles.value = [];
   }
+  try {
+    // несколько итераций подгонки, чтобы увидеть реальную разницу
+
+    await nextTick();
+    const root = document.querySelector(".app") as HTMLElement | null;
+
+    const contentHeight = root?.scrollHeight ?? 0;
+    const viewportHeight = window.innerHeight;
+    const delta = contentHeight - viewportHeight;
+
+    await window.api.resizeByDelta(delta);
+  } catch (err) {
+    console.error("[resize-debug] resize failed", err);
+  }
 });
 </script>
 
@@ -193,13 +210,14 @@ onMounted(async () => {
 .app {
   width: 100%;
   max-width: 400px;
-  padding: 32px 28px;
+  padding: 0 28px 8px;
   display: flex;
   flex-direction: column;
   gap: 24px;
 
   &_header {
     text-align: center;
+    padding-top: 4px;
   }
 
   &_title {
@@ -218,7 +236,6 @@ onMounted(async () => {
   &_controls {
     display: flex;
     justify-content: center;
-    padding: 12px 0;
   }
 
   &_status {
