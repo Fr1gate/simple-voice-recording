@@ -512,6 +512,7 @@ onMounted(async () => {
     max-height: 96px;
     overflow-y: auto;
     text-align: left;
+    user-select: text;
   }
 
   &_update-error-message {

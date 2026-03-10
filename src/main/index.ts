@@ -24,6 +24,14 @@ function createWindow(): void {
     },
   });
 
+  if (!is.dev) {
+    try {
+      mainWindow.webContents.openDevTools({ mode: "detach" });
+    } catch (error) {
+      console.error("Failed to open DevTools in production", error);
+    }
+  }
+
   mainWindow.on("ready-to-show", () => mainWindow.show());
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
