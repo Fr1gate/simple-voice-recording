@@ -40,7 +40,7 @@ export function useAudioRecorder() {
     }
   }
 
-  async function startRecording(): Promise<void> {
+  async function startRecording(format: string): Promise<void> {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: selectedDeviceId.value ? { exact: selectedDeviceId.value } : undefined,
@@ -54,7 +54,7 @@ export function useAudioRecorder() {
     audioContext = new AudioContext({ sampleRate: 44100 })
     recordedSampleRate = audioContext.sampleRate
 
-    await window.api.startTempRecording(recordedSampleRate)
+    await window.api.startTempRecording(recordedSampleRate, format)
 
     sourceNode = audioContext.createMediaStreamSource(mediaStream)
     scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1)

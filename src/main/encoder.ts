@@ -1,9 +1,11 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
-
 import { readFileSync } from "fs";
 
 interface LameMp3Encoder {
-  new (channels: number, sampleRate: number, kbps: number): {
+  new (
+    channels: number,
+    sampleRate: number,
+    kbps: number,
+  ): {
     encodeBuffer: (left: Int16Array, right?: Int16Array) => ArrayLike<number>;
     flush: () => ArrayLike<number>;
   };
@@ -104,3 +106,6 @@ export function encodeMp3(pcm: Float32Array, sampleRate: number): Buffer {
 
   return Buffer.concat(chunks);
 }
+
+// Экспортируем конструктор для потокового кодирования MP3 в main-процессе.
+export { Mp3Encoder };

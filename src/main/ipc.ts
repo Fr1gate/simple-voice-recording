@@ -1,8 +1,15 @@
 import { app, ipcMain, dialog, BrowserWindow } from "electron";
-import { writeFile, access, appendFile, readFile, unlink } from "fs/promises";
+import {
+  writeFile,
+  access,
+  appendFile,
+  readFile,
+  unlink,
+  copyFile,
+} from "fs/promises";
 import { constants as fsConstants } from "fs";
 import { join } from "path";
-import { encodeWav, encodeMp3 } from "./encoder";
+import { encodeWav, encodeMp3, floatToInt16, Mp3Encoder } from "./encoder";
 import {
   addRecentFile,
   getLastDirectory,
@@ -18,6 +25,16 @@ const FORMAT_FILTERS: Record<string, Electron.FileFilter[]> = {
 
 let tempRecordingFile: string | null = null;
 let tempRecordingSampleRate: number | null = null;
+let tempRecordingFormat: "wav" | "mp3" | null = null;
+
+type Mp3EncoderInstance = {
+  encodeBuffer: (left: Int16Array, right?: Int16Array) => ArrayLike<number>;
+  flush: () => ArrayLike<number>;
+};
+
+let mp3Encoder: Mp3EncoderInstance | null = null;
+let mp3Pending: Int16Array | null = null;
+const MP3_BLOCK_SIZE = 1152;
 
 async function cleanupTempRecording(): Promise<void> {
   if (tempRecordingFile) {
@@ -29,6 +46,9 @@ async function cleanupTempRecording(): Promise<void> {
   }
   tempRecordingFile = null;
   tempRecordingSampleRate = null;
+  tempRecordingFormat = null;
+  mp3Encoder = null;
+  mp3Pending = null;
 }
 
 async function buildDefaultPath(format: string): Promise<string> {
@@ -107,17 +127,28 @@ export function registerIpcHandlers(): void {
     await showFileInExplorer(filePath);
   });
 
-  ipcMain.handle("recording:start-temp", async (_event, sampleRate: number) => {
-    await cleanupTempRecording();
-    const dir = app.getPath("temp");
-    const filePath = join(
-      dir,
-      `microphone-recording-${Date.now().toString(36)}.pcm`,
-    );
-    await writeFile(filePath, Buffer.alloc(0));
-    tempRecordingFile = filePath;
-    tempRecordingSampleRate = sampleRate;
-  });
+  ipcMain.handle(
+    "recording:start-temp",
+    async (_event, sampleRate: number, format: string) => {
+      await cleanupTempRecording();
+      tempRecordingSampleRate = sampleRate;
+      tempRecordingFormat = format === "mp3" ? "mp3" : "wav";
+
+      const dir = app.getPath("temp");
+      const ext = tempRecordingFormat === "mp3" ? "mp3" : "pcm";
+      const filePath = join(
+        dir,
+        `microphone-recording-${Date.now().toString(36)}.${ext}`,
+      );
+      await writeFile(filePath, Buffer.alloc(0));
+      tempRecordingFile = filePath;
+
+      if (tempRecordingFormat === "mp3") {
+        mp3Encoder = new Mp3Encoder(1, sampleRate, 192);
+        mp3Pending = null;
+      }
+    },
+  );
 
   ipcMain.handle(
     "recording:append-chunk",
@@ -125,8 +156,45 @@ export function registerIpcHandlers(): void {
       if (!tempRecordingFile) {
         throw new Error("No active temp recording");
       }
-      const buf = Buffer.from(chunk);
-      await appendFile(tempRecordingFile, buf);
+      if (tempRecordingFormat === "mp3") {
+        if (!mp3Encoder) {
+          throw new Error("MP3 encoder is not initialized");
+        }
+        const floats = new Float32Array(chunk);
+        const ints = floatToInt16(floats);
+
+        let samples: Int16Array;
+        if (mp3Pending && mp3Pending.length > 0) {
+          const combined = new Int16Array(mp3Pending.length + ints.length);
+          combined.set(mp3Pending);
+          combined.set(ints, mp3Pending.length);
+          samples = combined;
+        } else {
+          samples = ints;
+        }
+
+        const fullLength = samples.length - (samples.length % MP3_BLOCK_SIZE);
+        const encodedParts: Buffer[] = [];
+
+        for (let i = 0; i < fullLength; i += MP3_BLOCK_SIZE) {
+          const block = samples.subarray(i, i + MP3_BLOCK_SIZE);
+          const mp3buf = mp3Encoder.encodeBuffer(block);
+          if (mp3buf && mp3buf.length > 0) {
+            encodedParts.push(Buffer.from(mp3buf));
+          }
+        }
+
+        mp3Pending =
+          fullLength < samples.length ? samples.subarray(fullLength) : null;
+
+        if (encodedParts.length > 0) {
+          const buf = Buffer.concat(encodedParts);
+          await appendFile(tempRecordingFile, buf);
+        }
+      } else {
+        const buf = Buffer.from(chunk);
+        await appendFile(tempRecordingFile, buf);
+      }
     },
   );
 
@@ -141,35 +209,54 @@ export function registerIpcHandlers(): void {
         throw new Error("No temp recording to save");
       }
 
-      try {
-        const raw = await readFile(tempRecordingFile);
+      const effectiveFormat =
+        format === "mp3" || format === "wav" ? format : tempRecordingFormat;
 
+      if (effectiveFormat === "mp3") {
+        if (!mp3Encoder) {
+          throw new Error("MP3 encoder is not initialized");
+        }
+
+        const encodedParts: Buffer[] = [];
+
+        if (mp3Pending && mp3Pending.length > 0) {
+          const mp3buf = mp3Encoder.encodeBuffer(mp3Pending);
+          if (mp3buf && mp3buf.length > 0) {
+            encodedParts.push(Buffer.from(mp3buf));
+          }
+          mp3Pending = null;
+        }
+
+        const tail = mp3Encoder.flush();
+        if (tail && tail.length > 0) {
+          encodedParts.push(Buffer.from(tail));
+        }
+
+        if (encodedParts.length > 0) {
+          const buf = Buffer.concat(encodedParts);
+          await appendFile(tempRecordingFile, buf);
+        }
+
+        await copyFile(tempRecordingFile, filePath);
+        await addRecentFile(filePath);
+        await showFileInExplorer(filePath);
+        await cleanupTempRecording();
+      } else if (effectiveFormat === "wav") {
+        const raw = await readFile(tempRecordingFile);
         const pcm = new Float32Array(
           raw.buffer,
           raw.byteOffset,
           raw.byteLength / Float32Array.BYTES_PER_ELEMENT,
         );
-
-        let encoded: Buffer;
-        switch (format) {
-          case "wav":
-            encoded = encodeWav(pcm, tempRecordingSampleRate);
-            break;
-          case "mp3":
-            encoded = encodeMp3(pcm, tempRecordingSampleRate);
-            break;
-          default: {
-            throw new Error(`Unsupported format: ${format}`);
-          }
-        }
+        const encoded = encodeWav(pcm, tempRecordingSampleRate);
 
         await writeFile(filePath, encoded);
 
         await addRecentFile(filePath);
         await showFileInExplorer(filePath);
         await cleanupTempRecording();
-      } catch (error) {
-        throw error;
+      } else {
+        throw new Error(`Unsupported format: ${format}`);
       }
     },
   );

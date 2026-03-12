@@ -13,7 +13,7 @@ interface RecorderAPI {
   resizeByDelta(deltaHeight: number): Promise<void>
   startUpdateDownload(): Promise<void>
   onUpdateState(listener: (state: unknown) => void): () => void
-  startTempRecording(sampleRate: number): Promise<void>
+  startTempRecording(sampleRate: number, format: string): Promise<void>
   appendRecordingChunk(chunk: ArrayBuffer): Promise<void>
   cancelTempRecording(): Promise<void>
   saveRecordingFromTemp(format: string, filePath: string): Promise<void>

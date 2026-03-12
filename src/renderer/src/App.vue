@@ -240,7 +240,7 @@ async function handlePauseToggle(): Promise<void> {
 async function handleStart(): Promise<void> {
   try {
     errorMessage.value = "";
-    await startRecording();
+    await startRecording(format.value);
     status.value = "recording";
   } catch (e) {
     status.value = "error";

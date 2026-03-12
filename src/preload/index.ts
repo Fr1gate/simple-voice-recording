@@ -26,8 +26,8 @@ const api = {
     ipcRenderer.invoke('update:start-download'),
 
   // потоковая запись во временный файл
-  startTempRecording: (sampleRate: number): Promise<void> =>
-    ipcRenderer.invoke('recording:start-temp', sampleRate),
+  startTempRecording: (sampleRate: number, format: string): Promise<void> =>
+    ipcRenderer.invoke('recording:start-temp', sampleRate, format),
 
   appendRecordingChunk: (chunk: ArrayBuffer): Promise<void> =>
     ipcRenderer.invoke('recording:append-chunk', chunk),
